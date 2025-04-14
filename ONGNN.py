@@ -60,7 +60,6 @@ class ONGNNConv(MessagePassing):
         self.tm_norm = tm_norm
         self.hidden_channel = hidden_channel
         self.chunk_size = chunk_size
-        # self.DeProp_Prop = DeProp_Prop(64, 64, 75, 0.003, 0.005, True)
 
     def forward(self, x, edge_index, last_tm_signal):
         # if isinstance(edge_index, SparseTensor):

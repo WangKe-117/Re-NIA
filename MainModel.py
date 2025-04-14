@@ -1,3 +1,4 @@
+import numpy as np
 import torch as th
 import torch.nn as nn
 import torch
@@ -90,7 +91,6 @@ class MLP(nn.Module):
         self.layer2.reset_parameters()
 
     def forward(self, x):
-
         if self.use_bn:
             x = self.bn1(x)
         x = self.input_dropout(x)
@@ -102,3 +102,5 @@ class MLP(nn.Module):
         x = self.layer2(x)
 
         return x
+
+

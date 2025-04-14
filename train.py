@@ -1,5 +1,3 @@
-import csv
-import os
 import time
 import numpy as np
 import pandas as pd
@@ -38,7 +36,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
     tprs = []
     precisions = []
     recalls = []
-    patience = 100
+    patience = 200
     i = 0
     kf = KFold(n_splits=5, shuffle=True, random_state=random_seed)
     for train_idx, test_idx in kf.split(samples[:, 2]):

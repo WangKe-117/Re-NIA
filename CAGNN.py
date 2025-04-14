@@ -3,13 +3,14 @@ from torch_sparse import SparseTensor
 import torch
 
 from AttentionGate import AttentionGate
-from ONGNN import ONGNN_method
+from BiCrossAttentionGate import BidirectionalCrossAttentionGate
 from layers_CAGNN import GCNConv_override, GATConv_override, GINConv_override
 from DeProp import DeProp_method
+# from ONGNN import ONGNN_method
 
 
 class CAGNN_method(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.15,
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.3,
                  norm_type=None, conv_type='DeProp', gate_type='AttentionGate'):
         super().__init__()
         self.transforms = None
@@ -44,7 +45,7 @@ class CAGNN_method(torch.nn.Module):
                 nn.Linear(hidden_channels, 1)
             )
         elif gate_type == 'AttentionGate':
-            self.gate = AttentionGate(hidden_channels)
+            self.gate = BidirectionalCrossAttentionGate(hidden_channels)
 
     def set_adj(self, adj):
         if self.conv_type == 'gat':
@@ -70,9 +71,9 @@ class CAGNN_method(torch.nn.Module):
             elif self.conv_type == 'gat':
                 layer = GATConv_override(hid_channels, hid_channels, dropout=0, drop_edge=0, alpha=0.2, nheads=1)
             elif self.conv_type == 'DeProp':
-                layer = DeProp_method(64, 64, 64, 0.25)
-            elif self.conv_type == 'ONGNN':
-                layer = ONGNN_method(64, 64, 64, 0.2)
+                layer = DeProp_method(64, 64, 64, 0.1)
+            # elif self.conv_type == 'ONGNN':
+            #     layer = ONGNN_method(64, 64, 64, 0.1)
             else:
                 raise 'not implement'
 
@@ -94,7 +95,7 @@ class CAGNN_method(torch.nn.Module):
             a = self.gate(torch.cat([self_x, conv_x], dim=1)).sigmoid()
             self_x = a * self_x + (1 - a) * conv_x
         elif self.gate_type == 'AttentionGate':
-            a = self.gate(self_x, conv_x).sigmoid()
+            a = self.gate(self_x, conv_x)
             self_x = a * self_x + (1 - a) * conv_x
         else:
             self_x = conv_x

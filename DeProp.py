@@ -16,12 +16,12 @@ class DeProp_method(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, dropout):
         super().__init__()
 
-        self.num_layers = 2
+        self.num_layers = 1
         self.orth = True
         self.lambda1 = 75
         self.lambda2 = 0.003
         self.gamma = 0.005
-        self.with_bn = False
+        self.with_bn = True
         self.F_norm = False
 
         self.conv_in = DeProp_Prop(in_channels, hidden_channels, self.lambda1, self.lambda2, self.gamma, self.orth)
