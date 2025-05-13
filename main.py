@@ -22,16 +22,6 @@ if __name__ == '__main__':
                                                       wd=5e-3,
                                                       random_seed=1235,
                                                       cuda=True)
-    # fprs, tprs, auc, precisions, recalls, prc = Train(directory='data',
-    #                                                   epochs=1000,
-    #                                                   n_classes=64,
-    #                                                   in_size=64,
-    #                                                   out_dim=64,
-    #                                                   dropout=0.1,
-    #                                                   lr=0.001,
-    #                                                   wd=5e-3,
-    #                                                   random_seed=1235,
-    #                                                   cuda=True)
     save_to_file(fprs, "fprs.pkl")
     save_to_file(tprs, "tprs.pkl")
     save_to_file(auc, "auc.pkl")

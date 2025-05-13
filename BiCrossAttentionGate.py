@@ -25,7 +25,6 @@ class BidirectionalCrossAttentionGate(nn.Module):
         self.tensor_fc = nn.Linear(in_dim ** 2, in_dim)
         self.gate = nn.Linear(in_dim * 3, in_dim * 3)
         self.fusion = nn.Linear(in_dim * 3, in_dim)
-        self.res_fc = nn.Linear(in_dim * 2, in_dim)
         self.res_transform = nn.Linear(in_dim * 2, in_dim)  # 直接处理双注意力输出
 
         # 输出组件

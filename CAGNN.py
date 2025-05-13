@@ -3,10 +3,9 @@ from torch_sparse import SparseTensor
 import torch
 
 from AttentionGate import AttentionGate
-from BiCrossAttentionGate import BidirectionalCrossAttentionGate
+from BiCrossAttentionGate1 import BidirectionalCrossAttentionGate
 from layers_CAGNN import GCNConv_override, GATConv_override, GINConv_override
 from DeProp import DeProp_method
-# from ONGNN import ONGNN_method
 
 
 class CAGNN_method(torch.nn.Module):
@@ -72,8 +71,6 @@ class CAGNN_method(torch.nn.Module):
                 layer = GATConv_override(hid_channels, hid_channels, dropout=0, drop_edge=0, alpha=0.2, nheads=1)
             elif self.conv_type == 'DeProp':
                 layer = DeProp_method(64, 64, 64, 0.1)
-            # elif self.conv_type == 'ONGNN':
-            #     layer = ONGNN_method(64, 64, 64, 0.1)
             else:
                 raise 'not implement'
 
@@ -95,8 +92,9 @@ class CAGNN_method(torch.nn.Module):
             a = self.gate(torch.cat([self_x, conv_x], dim=1)).sigmoid()
             self_x = a * self_x + (1 - a) * conv_x
         elif self.gate_type == 'AttentionGate':
-            a = self.gate(self_x, conv_x)
-            self_x = a * self_x + (1 - a) * conv_x
+            # a = self.gate(self_x, conv_x)
+            # self_x = a * self_x + (1 - a) * conv_x
+            self_x = self.gate(self_x, conv_x)
         else:
             self_x = conv_x
         return self_x, conv_x

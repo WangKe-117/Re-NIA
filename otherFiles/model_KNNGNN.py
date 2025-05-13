@@ -18,7 +18,6 @@ import torch
 import torch.nn.functional as F
 from layers_CAGNN import GCNConv_override, GATConv_override, GINConv_override
 from torch_geometric.utils import dense_to_sparse
-from utils_32 import get_pairwise_sim, torch_corr
 import argparse
 
 

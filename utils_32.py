@@ -33,7 +33,7 @@ def load_data(directory, random_seed):
     D_SSM = d_ssm
     M_FSM = m_fsm
     ID = D_SSM
-    IM = m_fsm
+    IM = M_FSM
     for i in range(D_SSM.shape[0]):
         for j in range(D_SSM.shape[1]):
             if ID[i][j] == 0:
