@@ -8,7 +8,9 @@ from sklearn import metrics
 from cul_loss import CustomLossWithRegularization
 import logging
 from MainModel import PREDICTOR
+from ReLearnModel import PREDICTOR_RELEARN
 from utils import build_graph, weight_reset
+from TRY import detect_change, relearn
 
 # 配置日志输出到文件
 logging.basicConfig(filename='output.log', level=logging.INFO, format='%(message)s')
@@ -36,7 +38,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
     tprs = []
     precisions = []
     recalls = []
-    patience = 200
+    patience = 100
     i = 0
     kf = KFold(n_splits=5, shuffle=True, random_state=random_seed)
     for train_idx, test_idx in kf.split(samples[:, 2]):
@@ -55,7 +57,6 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
         g_train = g.edge_subgraph(train_eid, relabel_nodes=False)  # 从异构图中创建子图，train集的子图
         # g_train.copy_from_parent()
         label_train = g_train.edata['label'].unsqueeze(1)
-
         src_train, dst_train = g_train.all_edges()  # 训练集的边
 
         test_eid = g.filter_edges(lambda edges: edges.data['train'] == 0)  # 原图中选出标记为0的记为测试集
@@ -85,26 +86,77 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
         model = model.to(context)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
+        model_relearn = PREDICTOR_RELEARN(G_train=g_train,
+                                          hid_dim=in_size,
+                                          n_class=n_classes,
+                                          batchnorm=True,
+                                          num_diseases=ID.shape[0],
+                                          num_mirnas=IM.shape[0],
+                                          out_dim=out_dim,
+                                          dropout=dropout)
+        model_relearn.apply(weight_reset)
+        model_relearn = model_relearn.to(context)
+        optimizer_relearn = torch.optim.Adam(model_relearn.parameters(), lr=lr, weight_decay=wd)
+
         lambda_reg = 0.001  # 调整此值以控制正则化的强度
         cul_loss = CustomLossWithRegularization(lambda_reg)
         patience_counter = 0
         best_model_state = {}
+
+        last_epochs_pred_matrix = []
+
+        for epoch in range(300):
+            model.train()
+            with torch.autograd.set_detect_anomaly(True):
+                score_train_pre = model(src_train, dst_train, True)  # [N, 1]
+                loss_train_pre = cul_loss(score_train_pre, label_train, model)
+
+                pred_label_tensor = (score_train_pre.view(-1) >= 0.5).long()  # shape: [N]
+                last_epochs_pred_matrix.append(pred_label_tensor.unsqueeze(1))  # shape: [N, 1]
+
+                optimizer.zero_grad()
+                loss_train_pre.backward()
+                optimizer.step()
+
+                print('PreTraining... :', epoch + 1, '/300')
+
+        # 拼接为最终的 [N, E] 张量（E=80）
+        last_epochs_pred_matrix = torch.cat(last_epochs_pred_matrix, dim=1)  # shape: [N, 80]
+
+        N = last_epochs_pred_matrix.shape[0]
+        half = N // 2
+
+        first_half = last_epochs_pred_matrix[:half]  # 前一半行，[0, half)
+        second_half = last_epochs_pred_matrix[half:]  # 后一半行，[half, N)
+
+        unstable_index = detect_change(first_half, second_half)
+        unstable_index.sort()
+
+        src_unstable = torch.cat([src_train[unstable_index], dst_train[unstable_index]], dim=0)
+        dst_unstable = torch.cat([dst_train[unstable_index], src_train[unstable_index]], dim=0)
+
+        label_relearn_half = torch.from_numpy(samples_df.loc[unstable_index, 'label'].values.astype('int64')).unsqueeze(1)
+        label_relearn = torch.cat([label_relearn_half, label_relearn_half], dim=0).float().to(context)
+
+        # unstable_edges_index = edge_index[:, unstable_index]
+
+        # flattened = unstable_edges.view(-1)
+        # unstable_node_ids = list(set(flattened.tolist()))
 
         for epoch in range(epochs):
             start = time.time()
 
             model.train()
             with torch.autograd.set_detect_anomaly(True):
-                score_train = model(src_train, dst_train, True)  # train集子图进入model训练
+                score_train = model(src_train, dst_train, True)
                 loss_train = cul_loss(score_train, label_train, model)
 
-                last_epochs_pred_matrix = list()
-                score_train_cpu = np.squeeze(score_train.cpu().detach().numpy())
-                pred_label = [0 if j < 0.5 else 1 for j in score_train_cpu]
-                last_epochs_pred_matrix.append(pred_label)
+                loss_relearn = relearn(model_relearn, optimizer_relearn, src_unstable, dst_unstable, label_relearn, cul_loss)
 
-                optimizer.zero_grad()  # 梯度置零
-                loss_train.backward()  # 反向传播
+                loss = 0.2 * loss_relearn + 0.8 * loss_train
+
+                optimizer.zero_grad()
+                loss.backward()
                 optimizer.step()
 
             model.eval()
@@ -138,7 +190,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
 
             end = time.time()
             if (epoch + 1) % 10 == 0:
-                print('Epoch:', epoch + 1, 'Train Loss: %.4f' % loss_train.item(),
+                print('Epoch:', epoch + 1, 'Train Loss: %.4f' % loss.item(),
                       'Val Loss: %.4f' % loss_val.cpu().detach().numpy(),
                       'Acc: %.4f' % acc_val, 'Pre: %.4f' % pre_val, 'Recall: %.4f' % recall_val, 'F1: %.4f' % f1_val,
                       'Train AUC: %.4f' % train_auc, 'Val AUC: %.4f' % val_auc, 'Time: %.2f' % (end - start))

@@ -1,6 +1,6 @@
 import warnings
 import pickle
-from train import Train
+from train_try import Train
 from utils import plot_auc_curves, plot_prc_curves
 
 
@@ -17,10 +17,10 @@ if __name__ == '__main__':
                                                       n_classes=64,
                                                       in_size=64,
                                                       out_dim=64,
-                                                      dropout=0.0,
+                                                      dropout=0.5,
                                                       lr=0.001,
                                                       wd=5e-3,
-                                                      random_seed=1235,
+                                                      random_seed=2233,
                                                       cuda=True)
     save_to_file(fprs, "fprs.pkl")
     save_to_file(tprs, "tprs.pkl")

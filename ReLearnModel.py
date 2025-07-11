@@ -4,12 +4,13 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-from CAGNN import CAGNN_method
-from DeProp import DeProp_method
+from CAGNN_Re import CAGNN_method
+from DeProp_Re import DeProp_method
 from ONGNN import ONGNN_method
+from GCN import SimpleGCN
 
 
-class PREDICTOR(nn.Module):
+class PREDICTOR_RELEARN(nn.Module):
     def __init__(self, G_train, hid_dim, n_class, batchnorm, num_diseases, num_mirnas, out_dim, dropout):
         super().__init__()
         self.G_train = G_train
@@ -27,8 +28,9 @@ class PREDICTOR(nn.Module):
         self.dropout1 = nn.Dropout(dropout)
         self.dropout = dropout
         self.PROCESS_CAGNN = CAGNN_method(64, 64, 64)
-        # self.PROCESS_DeProp = DeProp_method(64, 64, 64, 0.25)
+        self.PROCESS_DeProp = DeProp_method(64, 64, 64, 0.2)
         # self.PROCESS_ONGNN = ONGNN_method(64, 64, 64, 0.2)
+        # self.PROCESS_GCN = SimpleGCN(64, 64, 64, 0.2)
         self.predict = nn.Linear(out_dim * 2, 1)
         self.fcs = nn.ModuleList()
         self.fcs.append(nn.Linear(64, 64))
@@ -50,8 +52,8 @@ class PREDICTOR(nn.Module):
         # else:
         #     adj = self.G_all.adj().to_dense()
         # adj = torch.Tensor(adj)
-
         # x = self.PROCESS_DeProp(x, edge_index)
+
         # x = self.PROCESS_ONGNN(x, edge_index)
         x = self.PROCESS_CAGNN(x, edge_index)
         x = F.dropout(x, self.dropout, training=training)
@@ -63,15 +65,11 @@ class PREDICTOR(nn.Module):
         h = th.cat((h_d, h_m), dim=0)  # (878,64)
         # 这里的disease和mirnas就是顶点，其对应位置就顶点之间存在边的label：0或者1
         # 疾病顶点特征
-        h_diseases = h[diseases]  # disease中有重复的疾病名称;(17376,64)
+        h_diseases = h[diseases]
         # mirnas顶点的特征
         h_mirnas = h[mirnas]
-        h_concat = th.cat((h_diseases, h_mirnas), 1)  # (17376,128)
+        h_concat = th.cat((h_diseases, h_mirnas), 1)
         predict_score = th.sigmoid(self.predict(h_concat))
-
-        # if training:
-        #     score_train_cpu = np.squeeze(predict_score.cpu().detach().numpy())
-        #     pred_label = [0 if j < 0.5 else 1 for j in score_train_cpu]
 
         return predict_score
 

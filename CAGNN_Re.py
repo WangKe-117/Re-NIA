@@ -5,7 +5,7 @@ import torch
 from AttentionGate import AttentionGate
 from BiCrossAttentionGate3 import BidirectionalCrossAttentionGate
 from layers_CAGNN import GCNConv_override, GATConv_override, GINConv_override
-from DeProp import DeProp_method
+from DeProp_Re import DeProp_method
 from GCN import SimpleGCN
 
 

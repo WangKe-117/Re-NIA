@@ -12,7 +12,7 @@ def get_mirna_name(index):
     return mirna_dict[index]
 
 
- # diseasesIdx = (diseases[:8688] + 1).unsqueeze(1)
+        # diseasesIdx = (diseases[:8688] + 1).unsqueeze(1)
         # mirnasIdx = (mirnas[:8688] - self.num_diseases + 1).unsqueeze(1)
         #
         #
