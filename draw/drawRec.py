@@ -3,7 +3,7 @@ import numpy as np
 
 # 模型 & 数据
 models = ['Re-NIA', 'w/o-RSAM', 'w/o-BiCAN', 'w/o-Relearning']
-auc_values = [0.8845, 0.8646, 0.8606, 0.8789]
+auc_values = [0.8845, 0.8378, 0.8519, 0.8557]
 colors = ['#4C72B0', '#55A868', '#F28E2B', '#C44E52']
 
 # 设置精确间距和柱宽
@@ -28,8 +28,8 @@ plt.xticks(x, models, fontsize=15)
 plt.xlim(xlim_min, xlim_max)
 
 # 设置 Y 轴
-plt.ylim(0.856, 0.888)
-plt.yticks(np.arange(0.856, 0.8882, 0.002), fontsize=12)
+plt.ylim(0.813, 0.891)
+plt.yticks(np.arange(0.813, 0.8916, 0.006), fontsize=12)
 
 # 添加顶部数值
 for xi, auc in zip(x, auc_values):

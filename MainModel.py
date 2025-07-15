@@ -56,6 +56,7 @@ class PREDICTOR(nn.Module):
         x = self.PROCESS_CAGNN(x, edge_index)
         x = F.dropout(x, self.dropout, training=training)
         feat0 = th.log_softmax(self.mlp(x), dim=-1)
+        # feat0 = x
         h_d = th.cat((feat0[:self.num_diseases], feats[:self.num_diseases]), dim=1)
         h_m = th.cat((feat0[self.num_diseases:], feats[self.num_diseases:]), dim=1)
         h_m = self.dropout1(F.elu(self.m_fc1(h_m)))  # (495,64)

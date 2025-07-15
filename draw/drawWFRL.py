@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # 模型 & 数据
-models = ['Re-NIA', 'w/o-RSAM', 'w/o-BiCAN', 'w/o-Relearning']
-auc_values = [0.8501, 0.8791, 0.8642, 0.8644]
-colors = ['#4C72B0', '#55A868', '#F28E2B', '#C44E52']
+models = ['Re-NIA', 'NIA', 'DARSFormer', 'HHOMR', "GRPAMDA"]
+auc_values = [0.328, 0.653, 0.821, 0.874, 0.791]
+colors = ['#4C72B0', '#C44E52', '#00A087', '#7E7F9A', '#806AAE']
 
 # 设置精确间距和柱宽
 gap = 1.0       # 每段空隙长度
@@ -28,8 +28,8 @@ plt.xticks(x, models, fontsize=15)
 plt.xlim(xlim_min, xlim_max)
 
 # 设置 Y 轴
-plt.ylim(0.833, 0.885)
-plt.yticks(np.arange(0.833, 0.8852, 0.004), fontsize=12)
+plt.ylim(0, 1)
+plt.yticks(np.arange(0, 1.05, 0.05), fontsize=12)
 
 # 添加顶部数值
 for xi, auc in zip(x, auc_values):
@@ -43,7 +43,7 @@ plt.grid(axis='y', color='gray', linestyle='-', linewidth=0.8, alpha=0.6)
 
 # 坐标轴标题
 plt.xlabel('', fontsize=18)
-plt.ylabel('Precision', fontsize=18)
+plt.ylabel('WFRL', fontsize=18)
 
 # 布局优化
 plt.tight_layout()

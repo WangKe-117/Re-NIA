@@ -1,32 +1,22 @@
 import torch
 
-
-def detect_change(pred_label):
-    pulse_matrix = (pred_label[:, 1:] != pred_label[:, :-1]).long()  # [N, E-1]
-    p = pulse_matrix.cpu().numpy()
-
-    res = get_unstable_index(pulse_matrix)
-
-    return res
+from torch_geometric.data import Data
+from torch_geometric.utils import k_hop_subgraph, to_networkx
 
 
-def get_ratio(u_list):
-    return (len(u_list) / 8688) * 100
+def detect_change(pred_label1, pred_label2):
+    pulse_matrix1 = (pred_label1[:, 1:] != pred_label1[:, :-1]).long()  # [N, E-1]
+    p1 = pulse_matrix1.cpu().numpy()
 
+    pulse_matrix2 = (pred_label2[:, 1:] != pred_label2[:, :-1]).long()  # [N, E-1]
+    p2 = pulse_matrix2.cpu().numpy()
 
-# def detect_change(pred_label1, pred_label2):
-#     pulse_matrix1 = (pred_label1[:, 1:] != pred_label1[:, :-1]).long()  # [N, E-1]
-#     p1 = pulse_matrix1.cpu().numpy()
-#
-#     pulse_matrix2 = (pred_label2[:, 1:] != pred_label2[:, :-1]).long()  # [N, E-1]
-#     p2 = pulse_matrix2.cpu().numpy()
-#
-#     r1 = get_unstable_index(pulse_matrix1)
-#     r2 = get_unstable_index(pulse_matrix2)
-#
-#     result = list(set(r1) & set(r2))
-#
-#     return result
+    r1 = get_unstable_index(pulse_matrix1)
+    r2 = get_unstable_index(pulse_matrix2)
+
+    result = list(set(r1) & set(r2))
+
+    return result
 
 
 def get_unstable_index(pulse_matrix):

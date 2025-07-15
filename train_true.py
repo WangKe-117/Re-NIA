@@ -10,8 +10,7 @@ import logging
 from MainModel import PREDICTOR
 from ReLearnModel import PREDICTOR_RELEARN
 from utils import build_graph, weight_reset
-from TRY import detect_change, relearn, get_ratio
-from Stablity_Evalaution import evalaution
+from UnstableDetection import detect_change, relearn
 
 # 配置日志输出到文件
 logging.basicConfig(filename='output.log', level=logging.INFO, format='%(message)s')
@@ -106,53 +105,43 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
 
         last_epochs_pred_matrix = []
 
-        for epoch in range(200):
+        for epoch in range(300):
             model.train()
             with torch.autograd.set_detect_anomaly(True):
                 score_train_pre = model(src_train, dst_train, True)  # [N, 1]
                 loss_train_pre = cul_loss(score_train_pre, label_train, model)
 
-                shalf = score_train_pre.shape[0] // 2
-                score_avg = (score_train_pre[:shalf] + score_train_pre[shalf:]) / 2
-
-                pred_label_tensor = (score_avg.view(-1) >= 0.5).long()  # shape: [N]
-                check = pred_label_tensor.cpu().numpy()
+                pred_label_tensor = (score_train_pre.view(-1) >= 0.5).long()  # shape: [N]
                 last_epochs_pred_matrix.append(pred_label_tensor.unsqueeze(1))  # shape: [N, 1]
 
                 optimizer.zero_grad()
                 loss_train_pre.backward()
                 optimizer.step()
 
-                print('PreTraining... :', epoch + 1, '/200')
+                print('PreTraining... :', epoch + 1, '/300')
 
-        # 拼接为最终的 [N, E] 张量
-        last_epochs_pred_matrix = torch.cat(last_epochs_pred_matrix, dim=1)
+        # 拼接为最终的 [N, E] 张量（E=80）
+        last_epochs_pred_matrix = torch.cat(last_epochs_pred_matrix, dim=1)  # shape: [N, 80]
 
-        # N = last_epochs_pred_matrix.shape[0]
-        # half = N // 2
-        #
-        # first_half = last_epochs_pred_matrix[:half]  # 前一半行，[0, half)
-        # second_half = last_epochs_pred_matrix[half:]  # 后一半行，[half, N)
+        N = last_epochs_pred_matrix.shape[0]
+        half = N // 2
 
-        # WFRL_Pre = evalaution(last_epochs_pred_matrix)
-        # print('WFRL_Pre:', WFRL_Pre)
+        first_half = last_epochs_pred_matrix[:half]  # 前一半行，[0, half)
+        second_half = last_epochs_pred_matrix[half:]  # 后一半行，[half, N)
 
-        unstable_index = detect_change(last_epochs_pred_matrix)
-
-        # UnstableRatio_Pre = get_ratio(unstable_index)
-        # print(f"UnstableRatio_Pre: {UnstableRatio_Pre:.2f}%")
-
+        unstable_index = detect_change(first_half, second_half)
         unstable_index.sort()
 
         src_unstable = torch.cat([src_train[unstable_index], dst_train[unstable_index]], dim=0)
         dst_unstable = torch.cat([dst_train[unstable_index], src_train[unstable_index]], dim=0)
 
-        label_relearn_half = torch.from_numpy(samples_df.loc[unstable_index, 'label'].values.astype('int64')).unsqueeze(
-            1)
+        label_relearn_half = torch.from_numpy(samples_df.loc[unstable_index, 'label'].values.astype('int64')).unsqueeze(1)
         label_relearn = torch.cat([label_relearn_half, label_relearn_half], dim=0).float().to(context)
-        # _______________________________________________________________________________________________________________________________
 
-        last_epochs_pred_matrix_re = []
+        # unstable_edges_index = edge_index[:, unstable_index]
+
+        # flattened = unstable_edges.view(-1)
+        # unstable_node_ids = list(set(flattened.tolist()))
 
         for epoch in range(epochs):
             start = time.time()
@@ -162,19 +151,9 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
                 score_train = model(src_train, dst_train, True)
                 loss_train = cul_loss(score_train, label_train, model)
 
-                loss_relearn = relearn(model_relearn, optimizer_relearn, src_unstable, dst_unstable, label_relearn,
-                                       cul_loss)
+                loss_relearn = relearn(model_relearn, optimizer_relearn, src_unstable, dst_unstable, label_relearn, cul_loss)
 
-                a = loss_train.item() / (loss_relearn.item() + loss_train.item())
-
-                loss = (1 - a) * loss_relearn + a * loss_train
-
-                # loss = 0.2 * loss_relearn + 0.8 * loss_train
-
-                rhalf = score_train.shape[0] // 2
-                rscore_avg = (score_train[:rhalf] + score_train[rhalf:]) / 2
-                rpred_label_tensor = (rscore_avg.view(-1) >= 0.5).long()  # shape: [N]
-                last_epochs_pred_matrix_re.append(rpred_label_tensor.unsqueeze(1))  # shape: [N, 1]
+                loss = 0.2 * loss_relearn + 0.8 * loss_train
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -216,13 +195,6 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
                       'Acc: %.4f' % acc_val, 'Pre: %.4f' % pre_val, 'Recall: %.4f' % recall_val, 'F1: %.4f' % f1_val,
                       'Train AUC: %.4f' % train_auc, 'Val AUC: %.4f' % val_auc, 'Time: %.2f' % (end - start))
         model.load_state_dict(best_model_state)
-
-        # 拼接为最终的 [N, E] 张量
-        last_epochs_pred_matrix_re = torch.cat(last_epochs_pred_matrix_re, dim=1)
-
-        WFRL_Re = evalaution(last_epochs_pred_matrix_re[:, -200:])
-        print('WFRL_Re:', WFRL_Re)
-
         model.eval()
         with torch.no_grad():
             model.load_state_dict(best_model_state)

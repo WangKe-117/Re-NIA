@@ -11,7 +11,7 @@ from GCN import SimpleGCN
 
 class CAGNN_method(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.3,
-                 norm_type=None, conv_type='DeProp', gate_type='directlyFusion'):
+                 norm_type=None, conv_type='DeProp', gate_type='AttentionGate'):
         super().__init__()
         self.transforms = None
         self.learnable_norm_neighb = None
@@ -73,7 +73,7 @@ class CAGNN_method(torch.nn.Module):
             elif self.conv_type == 'gat':
                 layer = GATConv_override(hid_channels, hid_channels, dropout=0, drop_edge=0, alpha=0.2, nheads=1)
             elif self.conv_type == 'DeProp':
-                layer = DeProp_method(64, 64, 64, 0.5)
+                layer = DeProp_method(64, 64, 64, 0.1)
             else:
                 raise 'not implement'
 

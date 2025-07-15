@@ -6,38 +6,25 @@ import dgl
 import random
 import torch
 import torch.nn as nn
-from numpy.linalg import eigh
-from otherFiles.model1 import Specformer
-def normalize_graph(g):
-    g = np.array(g)
-    g = g + g.T
-    g[g > 0.] = 1.0
-    deg = g.sum(axis=1).reshape(-1)
-    deg[deg == 0.] = 1.0
-    deg = np.diag(deg ** -0.5)
-    adj = np.dot(np.dot(deg, g), deg)
-    L = np.eye(g.shape[0]) - adj
-    return L
-def eigen_decompositon(g):
-    "The normalized (unit “length”) eigenvectors, "
-    "such that the column v[:,i] is the eigenvector corresponding to the eigenvalue w[i]."
-    g = normalize_graph(g)
-    e, u = eigh(g)
-    return e, u
+
+from MainModel import PREDICTOR
+from ReLearnModel import PREDICTOR_RELEARN
+from TRY import detect_change, relearn
+from cul_loss import CustomLossWithRegularization
+
 case_study_directory = 'case_study_data'
 case_study_result_directory = 'case_study_result'
 directory = 'data'
 epochs = 1000
-n_classes= 64
+n_classes = 3
 in_size = 64
 out_dim = 64
-dropout = 0
+dropout = 0.0
 slope = 0.2
 lr = 0.001
 wd = 5e-3
-random_seed = 100
+random_seed = 1235
 cuda = True
-
 
 warnings.filterwarnings("ignore")
 random.seed(random_seed)
@@ -55,11 +42,10 @@ if torch.cuda.is_available():
 #     context = torch.device('cpu')
 context = torch.device('cpu')
 
-toVerifyDiseases = pd.read_csv(case_study_directory+'/toVerifyDiseases.csv').values
-miRNA_name = pd.read_csv(case_study_directory+'/miRNA_name.csv', names=['miRNA'])
-dbDEMC = pd.read_csv(case_study_directory+'/dbDEMC.csv')
-miR2Disease = pd.read_csv(case_study_directory+'/miR2Disease.csv')
-dbDEMC19 = pd.read_csv(case_study_directory+'/transformed_start_benchmark2019_dbDEMC.csv')
+toVerifyDiseases = pd.read_csv(case_study_directory + '/toVerifyDiseases1.csv').values
+miRNA_name = pd.read_csv(case_study_directory + '/miRNA_name.csv', names=['miRNA'])
+dbDEMC = pd.read_csv(case_study_directory + '/dbDEMC.csv')
+miR2Disease = pd.read_csv(case_study_directory + '/miR2Disease.csv')
 
 disease_number = toVerifyDiseases[:, -1]
 disease_name = toVerifyDiseases[:, 2]
@@ -76,7 +62,8 @@ def sample(directory, disease_number, random_seed):
     unknown_associations = all_associations.loc[all_associations['label'] == 0]
 
     unknown_associations_sp_diseases = unknown_associations.loc[unknown_associations['disease'] != disease_number]
-    random_negative_sp_disease = unknown_associations_sp_diseases.sample(n=known_associations.shape[0], random_state=random_seed, axis=0)
+    random_negative_sp_disease = unknown_associations_sp_diseases.sample(n=known_associations.shape[0],
+                                                                         random_state=random_seed, axis=0)
 
     test_associations = unknown_associations.loc[unknown_associations['disease'] == disease_number]
 
@@ -93,19 +80,28 @@ def weight_reset(m):
 
 def load_data(directory):
     D_SSM1 = np.loadtxt(directory + '/D_SSM1.txt')
-    # WHAT??
     D_SSM2 = np.loadtxt(directory + '/D_SSM2.txt')
     D_GSM = np.loadtxt(directory + '/D_GSM.txt')
     M_FSM = np.loadtxt(directory + '/M_FSM.txt')
     M_GSM = np.loadtxt(directory + '/M_GSM.txt')
-    all_associations = pd.read_csv(directory + '/all_mirna_disease_pairs.csv', names=['miRNA', 'disease', 'label'])
-    ID = D_GSM
-    IM = M_GSM
+
+    D_SSM = (D_SSM1 + D_SSM2) / 2
+    ID = D_SSM
+    IM = M_FSM
+    for i in range(D_SSM.shape[0]):
+        for j in range(D_SSM.shape[1]):
+            if ID[i][j] == 0:
+                ID[i][j] = D_GSM[i][j]
+
+    for i in range(M_FSM.shape[0]):
+        for j in range(M_FSM.shape[1]):
+            if IM[i][j] == 0:
+                IM[i][j] = M_GSM[i][j]
     return ID, IM
 
 
 def build_graph(directory, disease_number, random_seed):
-    ID, IM  = load_data(directory)
+    ID, IM = load_data(directory)
     samples, test_samples = sample(directory, disease_number, random_seed)
 
     g = dgl.DGLGraph()
@@ -135,25 +131,14 @@ def build_graph(directory, disease_number, random_seed):
                 data={'label': torch.from_numpy(samples[:, 2].astype('float32'))})
     g.add_edges(sample_mirna_vertices, sample_disease_vertices,
                 data={'label': torch.from_numpy(samples[:, 2].astype('float32'))})
-    g.readonly()
+    # g.readonly()
 
     return g, sample_disease_vertices, sample_mirna_vertices, samples, test_samples, ID, IM
 
 
 for d_number in disease_number:
     g, disease_vertices, mirna_vertices, samples, test_samples, ID, IM = build_graph(directory, d_number, random_seed)
-
     g.to(context)
-    adj_max = g.adjacency_matrix().to_dense()
-    adj_m = torch.Tensor(adj_max)
-    e, u = eigen_decompositon(adj_m)
-    e = torch.FloatTensor(e)
-    u = torch.FloatTensor(u)
-    ##add
-    list_f = list(zip(disease_vertices, mirna_vertices))
-    transposed_list = [[row[i] for row in list_f] for i in range(2)]
-    transposed_list = torch.Tensor(transposed_list)
-
 
     sample_df = pd.DataFrame(samples, columns=['miRNA', 'disease', 'label'])
     sample_df['train'] = 0
@@ -165,9 +150,8 @@ for d_number in disease_number:
     g.edges[disease_vertices, mirna_vertices].data.update(edge_data)
     g.edges[mirna_vertices, disease_vertices].data.update(edge_data)
 
-
     train_eid = g.filter_edges(lambda edges: edges.data['train'])
-    g_train = g.edge_subgraph(train_eid, preserve_nodes=True)
+    g_train = g.edge_subgraph(train_eid, relabel_nodes=False)
 
     # g_train.copy_from_parent()
 
@@ -181,68 +165,101 @@ for d_number in disease_number:
     print('## Training edges:', len(train_eid))
     print('## Testing edges:', len(test_eid))
 
-    model = Specformer(
-        adj=adj_m,
-        transposed_list=transposed_list,
-        e=e,
-        u=u,
-        G=g_train,
-        hid_dim=in_size,
-        n_class=n_classes,
-        S=3,
-        K=4,
-        batchnorm=False,
-        num_diseases=ID.shape[0],
-        num_mirnas=IM.shape[0],
-        d_sim_dim=ID.shape[1],
-        m_sim_dim=IM.shape[1],
-        out_dim=out_dim,
-        dropout=dropout,
-        slope=slope,
-        node_dropout=0,
-        input_droprate=0,
-        hidden_droprate=0,
-
-        nclass=64,
-        nfeat=64,
-        nlayer=2,
-        hidden_dim=64,
-        nheads=2,
-        tran_dropout=0,
-        feat_dropout=0,
-        prop_dropout=0,
-        norm='none'
-
-    )
+    model = PREDICTOR(G_train=g_train,
+                      hid_dim=in_size,
+                      n_class=n_classes,
+                      batchnorm=True,
+                      num_diseases=ID.shape[0],
+                      num_mirnas=IM.shape[0],
+                      out_dim=out_dim,
+                      dropout=dropout)
 
     model.apply(weight_reset)
     model.to(context)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
-    loss = nn.BCELoss()
 
-    for epoch in range(epochs):
+    model_relearn = PREDICTOR_RELEARN(G_train=g_train,
+                                      hid_dim=in_size,
+                                      n_class=n_classes,
+                                      batchnorm=True,
+                                      num_diseases=ID.shape[0],
+                                      num_mirnas=IM.shape[0],
+                                      out_dim=out_dim,
+                                      dropout=dropout)
+    model_relearn.apply(weight_reset)
+    model_relearn = model_relearn.to(context)
+    optimizer_relearn = torch.optim.Adam(model_relearn.parameters(), lr=lr, weight_decay=wd)
+
+    lambda_reg = 0.001  # 调整此值以控制正则化的强度
+    calculateloss = CustomLossWithRegularization(lambda_reg)
+    # calculateloss = nn.BCELoss()
+
+    last_epochs_pred_matrix = []
+    for epoch in range(200):
+        model.train()
+        with torch.autograd.set_detect_anomaly(True):
+            score_train_pre = model(src_train, dst_train, True)  # [N, 1]
+            loss_train_pre = calculateloss(score_train_pre, label_train, model)
+
+            pred_label_tensor = (score_train_pre.view(-1) >= 0.5).long()  # shape: [N]
+            last_epochs_pred_matrix.append(pred_label_tensor.unsqueeze(1))  # shape: [N, 1]
+
+            optimizer.zero_grad()
+            loss_train_pre.backward()
+            optimizer.step()
+
+            print('PreTraining... :', epoch + 1, '/200')
+
+        # 拼接为最终的 [N, E] 张量（E=80）
+    last_epochs_pred_matrix = torch.cat(last_epochs_pred_matrix, dim=1)  # shape: [N, 80]
+
+    N = last_epochs_pred_matrix.shape[0]
+    half = N // 2
+
+    first_half = last_epochs_pred_matrix[:half]  # 前一半行，[0, half)
+    second_half = last_epochs_pred_matrix[half:]  # 后一半行，[half, N)
+
+    unstable_index = detect_change(first_half, second_half)
+    unstable_index.sort()
+
+    src_unstable = torch.cat([src_train[unstable_index], dst_train[unstable_index]], dim=0)
+    dst_unstable = torch.cat([dst_train[unstable_index], src_train[unstable_index]], dim=0)
+
+    label_relearn_half = torch.from_numpy(sample_df.loc[unstable_index, 'label'].values.astype('int64')).unsqueeze(1)
+    label_relearn = torch.cat([label_relearn_half, label_relearn_half], dim=0).float().to(context)
+
+    for epoch in range(500):
         start = time.time()
 
         model.train()
         with torch.autograd.set_detect_anomaly(True):
-            score_train = model(g_train, src_train, dst_train)
-            loss_train = loss(score_train, label_train)
+            score_train = model(src_train, dst_train, True)
+            loss_train = calculateloss(score_train, label_train, model)
+
+            loss_relearn = relearn(model_relearn, optimizer_relearn, src_unstable, dst_unstable, label_relearn,
+                                   calculateloss)
+
+            # a = loss_train.item() / (loss_relearn.item() + loss_train.item())
+            #
+            # loss = (1 - a) * loss_relearn + a * loss_train
+
+            loss = 0.2 * loss_relearn + 0.8 * loss_train
 
             optimizer.zero_grad()
-            loss_train.backward()
+            loss.backward()
             optimizer.step()
 
         model.eval()
         with torch.no_grad():
-            score_val = model(g, src_test, dst_test)
-            loss_val = loss(score_val, label_test)
+            score_val = model(src_test, dst_test, False)
+            loss_val = calculateloss(score_val, label_test, model)
 
         end = time.time()
-        print('Epoch:', epoch+1, 'Train Loss: %.4f' % loss_train.item(), 'Time: %.2f' % (end - start))
+        print('Epoch:', epoch + 1, 'Train Loss: %.4f' % loss.item(), 'Time: %.2f' % (end - start))
 
     model.eval()
     with torch.no_grad():
-        score_test = model(g, src_test, dst_test)
+        score_test = model(src_test, dst_test, False)
 
     score_test_cpu = np.squeeze(score_test.cpu().detach().numpy())
     score_test = score_test_cpu[:test_samples.shape[0]]
@@ -253,7 +270,7 @@ for d_number in disease_number:
     candidate_number = test_samples_df['miRNA'].values
     candidate_miRNA = []
     for i in candidate_number:
-        candidate_miRNA.append(miRNA_name.values[i])
+        candidate_miRNA.append(miRNA_name.values[i-1])
 
     test_samples_df['miRNA_name'] = candidate_miRNA
 
@@ -263,22 +280,18 @@ for d_number in disease_number:
     candidate_related_mirnas = results['miRNA_name']
     to_confirmed_dbDEMC = dbDEMC.loc[dbDEMC['disease'] == toverifydisease_dict[d_number]]
     to_confirmed_miR2Disease = miR2Disease.loc[miR2Disease['disease'] == toverifydisease_dict[d_number]]
-    to_confirmed_dbDEMC19 = dbDEMC19.loc[dbDEMC19['disease'] == toverifydisease_dict[d_number]]
 
     evidence = []
     for mirna in candidate_related_mirnas:
         record = []
-        if  mirna in to_confirmed_miR2Disease['miRNA'].values and mirna in to_confirmed_dbDEMC19['miRNA'].values:
-            record = [' miR2Disease and dbDEMC19']
+        if mirna in to_confirmed_dbDEMC['miRNA'].values and mirna in to_confirmed_miR2Disease['miRNA'].values:
+            record = ['dbDEMC and miR2Disease']
             evidence.append(record)
-        elif mirna in to_confirmed_miR2Disease['miRNA'].values and mirna in to_confirmed_dbDEMC19['miRNA'].values:
-            record = ['miR2Disease and dbDEMC19']
+        elif mirna in to_confirmed_dbDEMC['miRNA'].values:
+            record = ['dbDEMC']
             evidence.append(record)
         elif mirna in to_confirmed_miR2Disease['miRNA'].values:
             record = ['miR2Disease']
-            evidence.append(record)
-        elif mirna in to_confirmed_dbDEMC19['miRNA'].values:
-            record = ['dbDEMC19']
             evidence.append(record)
         else:
             record = ['Unconfirmed']
