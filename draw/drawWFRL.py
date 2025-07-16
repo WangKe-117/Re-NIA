@@ -3,7 +3,7 @@ import numpy as np
 
 # 模型 & 数据
 models = ['Re-NIA', 'NIA', 'DARSFormer', 'HHOMR', "GRPAMDA"]
-auc_values = [0.328, 0.653, 0.821, 0.874, 0.791]
+auc_values = [0.3280, 0.6537, 0.8212, 0.8742, 0.7915]
 colors = ['#4C72B0', '#C44E52', '#00A087', '#7E7F9A', '#806AAE']
 
 # 设置精确间距和柱宽

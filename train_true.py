@@ -105,7 +105,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
 
         last_epochs_pred_matrix = []
 
-        for epoch in range(300):
+        for epoch in range(250):
             model.train()
             with torch.autograd.set_detect_anomaly(True):
                 score_train_pre = model(src_train, dst_train, True)  # [N, 1]
@@ -118,7 +118,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
                 loss_train_pre.backward()
                 optimizer.step()
 
-                print('PreTraining... :', epoch + 1, '/300')
+                print('PreTraining... :', epoch + 1)
 
         # 拼接为最终的 [N, E] 张量（E=80）
         last_epochs_pred_matrix = torch.cat(last_epochs_pred_matrix, dim=1)  # shape: [N, 80]
@@ -153,7 +153,11 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
 
                 loss_relearn = relearn(model_relearn, optimizer_relearn, src_unstable, dst_unstable, label_relearn, cul_loss)
 
-                loss = 0.2 * loss_relearn + 0.8 * loss_train
+                a = loss_train.item() / (loss_relearn.item() + loss_train.item())
+
+                loss = (1 - a) * loss_relearn + a * loss_train
+
+                # loss = 0.2 * loss_relearn + 0.8 * loss_train
 
                 optimizer.zero_grad()
                 loss.backward()
