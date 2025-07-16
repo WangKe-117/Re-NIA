@@ -10,7 +10,7 @@ from GCN import SimpleGCN
 
 
 class CAGNN_method(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.3,
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.2,
                  norm_type=None, conv_type='DeProp', gate_type='AttentionGate'):
         super().__init__()
         self.transforms = None

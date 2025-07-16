@@ -105,7 +105,7 @@ def Train(directory, epochs, n_classes, in_size, out_dim, dropout, lr, wd, rando
 
         last_epochs_pred_matrix = []
 
-        for epoch in range(250):
+        for epoch in range(200):
             model.train()
             with torch.autograd.set_detect_anomaly(True):
                 score_train_pre = model(src_train, dst_train, True)  # [N, 1]
