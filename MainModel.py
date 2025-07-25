@@ -1,12 +1,9 @@
-import numpy as np
 import torch as th
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-from CAGNN import CAGNN_method
-from DeProp import DeProp_method
-from ONGNN import ONGNN_method
+from Method import method
 
 
 class PREDICTOR(nn.Module):
@@ -26,15 +23,12 @@ class PREDICTOR(nn.Module):
         self.mlp = MLP(hid_dim, out_dim, n_class, 0.0, 0.0, batchnorm)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout = dropout
-        self.PROCESS_CAGNN = CAGNN_method(64, 64, 64)
-        # self.PROCESS_DeProp = DeProp_method(64, 64, 64, 0.25)
-        # self.PROCESS_ONGNN = ONGNN_method(64, 64, 64, 0.2)
+        self.PROCESS_CAGNN = method(64, 64, 64)
         self.predict = nn.Linear(out_dim * 2, 1)
         self.fcs = nn.ModuleList()
         self.fcs.append(nn.Linear(64, 64))
         self.act_fn = nn.ReLU()
 
-    # 383个疾病，495个miRNA  src_train = diseases,
     def forward(self, diseases, mirnas, training):
         self.G_train.apply_nodes(lambda nodes: {'z': self.dropout1(self.d_fc(nodes.data['d_sim']))}, self.disease_nodes)
         self.G_train.apply_nodes(lambda nodes: {'z': self.dropout1(self.m_fc(nodes.data['m_sim']))}, self.mirna_nodes)
@@ -45,34 +39,21 @@ class PREDICTOR(nn.Module):
         mirnas1 = mirnas.unsqueeze(0)
         edge_index = torch.cat((diseases1, mirnas1), dim=0)
 
-        # if training:
-        #     adj = self.G_train.adj().to_dense()
-        # else:
-        #     adj = self.G_all.adj().to_dense()
-        # adj = torch.Tensor(adj)
-
-        # x = self.PROCESS_DeProp(x, edge_index)
-        # x = self.PROCESS_ONGNN(x, edge_index)
         x = self.PROCESS_CAGNN(x, edge_index)
         x = F.dropout(x, self.dropout, training=training)
         feat0 = th.log_softmax(self.mlp(x), dim=-1)
-        # feat0 = x
+
         h_d = th.cat((feat0[:self.num_diseases], feats[:self.num_diseases]), dim=1)
         h_m = th.cat((feat0[self.num_diseases:], feats[self.num_diseases:]), dim=1)
-        h_m = self.dropout1(F.elu(self.m_fc1(h_m)))  # (495,64)
-        h_d = self.dropout1(F.elu(self.d_fc1(h_d)))  # (383,64)
-        h = th.cat((h_d, h_m), dim=0)  # (878,64)
-        # 这里的disease和mirnas就是顶点，其对应位置就顶点之间存在边的label：0或者1
-        # 疾病顶点特征
-        h_diseases = h[diseases]  # disease中有重复的疾病名称;(17376,64)
-        # mirnas顶点的特征
-        h_mirnas = h[mirnas]
-        h_concat = th.cat((h_diseases, h_mirnas), 1)  # (17376,128)
-        predict_score = th.sigmoid(self.predict(h_concat))
+        h_m = self.dropout1(F.elu(self.m_fc1(h_m)))
+        h_d = self.dropout1(F.elu(self.d_fc1(h_d)))
+        h = th.cat((h_d, h_m), dim=0)
 
-        # if training:
-        #     score_train_cpu = np.squeeze(predict_score.cpu().detach().numpy())
-        #     pred_label = [0 if j < 0.5 else 1 for j in score_train_cpu]
+        h_diseases = h[diseases]
+
+        h_mirnas = h[mirnas]
+        h_concat = th.cat((h_diseases, h_mirnas), 1)
+        predict_score = th.sigmoid(self.predict(h_concat))
 
         return predict_score
 
@@ -106,5 +87,3 @@ class MLP(nn.Module):
         x = self.layer2(x)
 
         return x
-
-

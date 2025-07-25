@@ -1,6 +1,6 @@
 import warnings
 import pickle
-from train_true import Train
+from train import Train
 from utils import plot_auc_curves, plot_prc_curves
 
 

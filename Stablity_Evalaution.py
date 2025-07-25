@@ -13,16 +13,6 @@ def evalaution(pred_label):
 
 
 def computeWFRL(pulse_matrix):
-    """
-        计算加权翻转连续长度指标 WFRL
-
-        参数:
-            pulse_matrix: np.ndarray，形状为 (E, K-1)，0/1 脉冲矩阵
-
-        返回:
-            wfrl: float，整体加权平均连续翻转长度
-        """
-
     E, K_minus_1 = pulse_matrix.shape
     wfrl_list = []
 
